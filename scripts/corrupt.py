@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+
+"""
+corrupt
+usage: ./corrupt.py --source=input.jpg [--output=corrupted.jpg] [--iterations=10]
+
+originally: http://www.recyclism.com/corrupt.php
+ported: @mattdennewitz
+"""
+
+from __future__ import unicode_literals
+import os
+import random
+import sys
+
+import click
+
+from PIL import Image
+
+
+class InvalidImage(Exception):
+    pass
+
+
+@click.command()
+@click.option('-s', '--source', type=click.File('r'), required=True)
+@click.option('-o', '--output', type=click.File('w+b'), required=True)
+@click.option('-i', '--iterations', type=click.INT, default=10)
+@click.option('-r', '--replacements', type=click.INT, default=5,
+              help='Number of replacements made per iteration. Default: 5.')
+@click.option('-v', '--verbose', is_flag=True)
+def corrupt(source, output, iterations, replacements, verbose):
+    """Politely, but firmly reconsider byte arrangement
+    from ``input``, render to ``output``.
+
+    @param source Path to source image
+    @param output Path to output image
+    @param iterations How many times to rethink and rearrange.
+    """
+
+    def read_chunks(fh):
+        while True:
+            chunk = fh.read(4096)
+            if not chunk:
+                break
+            yield chunk
+
+    sys.stdout.write("""
+\033[92m~ corrupt ~\033[0m
+
+- Iterations: {iterations}
+- Replacements per iteration: {iterations}
+
+""".format(iterations=iterations,
+           replacements=replacements))
+
+    try:
+        Image.open(source.name)
+    except:
+        raise InvalidImage('%s appears to be broken.' % source)
+
+    # read the image, copy into a buffer for manipulation
+    for chunk in read_chunks(source):
+        output.write(chunk)
+    source.close()
+
+    # herald the destroyer
+    iters = 0
+    steps = 0
+    block_start = 100
+    block_end = os.path.getsize(source.name) - 400
+
+    while True:
+        while iters < iterations:
+            if verbose:
+                sys.stdout.write( 'Iteration: %i' % (iters + 1))
+
+            while steps < replacements:
+                pos_a = random.randint(block_start, block_end)
+                pos_b = random.randint(block_start, block_end)
+
+                if verbose:
+                    sys.stdout.write(' Swapping 1 bytes, %i and %i\n' % (pos_a, pos_b))
+
+                output.seek(pos_a)
+                content_from_pos_a = output.read(1)
+                output.seek(0)
+
+                output.seek(pos_b)
+                content_from_pos_b = output.read(1)
+                output.seek(0)
+
+                # overwrite A with B
+                output.seek(pos_a)
+                output.write(content_from_pos_b)
+                output.seek(0)
+
+                # overwrite B with A
+                output.seek(pos_b)
+                output.write(content_from_pos_a)
+
+                # you *can* go home again, thomas wolfe
+                output.seek(0)
+
+                steps += 1
+
+            if verbose:
+                sys.stdout.write('\n')
+
+            iters += 1
+            steps = 0
+
+        try:
+            if not Image.open(output.name).verify():
+                break
+        except Exception as exc:
+            if verbose:
+                sys.stderr.write('Generated image cannot be verified')
+            continue
+
+    output.close()
+
+    sys.stdout.write('Done. Output written to "%s"\n\n' % output.name)
+
+
+if __name__ == '__main__':
+    try:
+        corrupt()
+    except InvalidImage as exc:
+        exit(exc)
