@@ -2,7 +2,6 @@
 
 """
 corrupt
-usage: ./corrupt.py --source=input.jpg [--output=corrupted.jpg] [--iterations=10]
 
 originally: http://www.recyclism.com/corrupt.php
 ported: @mattdennewitz
@@ -19,7 +18,8 @@ from PIL import Image
 
 
 class InvalidImage(Exception):
-    pass
+    """Raised when a given image cannot be read and verified.
+    """
 
 
 @click.command()
@@ -38,9 +38,10 @@ def corrupt(source, output, iterations, replacements, verbose):
     @param iterations How many times to rethink and rearrange.
     """
 
-    def read_chunks(fh):
+    def read_chunks(fd):
+        "Reads a file in chunks"
         while True:
-            chunk = fh.read(4096)
+            chunk = fd.read(4096)
             if not chunk:
                 break
             yield chunk
@@ -49,7 +50,7 @@ def corrupt(source, output, iterations, replacements, verbose):
 \033[92m~ corrupt ~\033[0m
 
 - Iterations: {iterations}
-- Replacements per iteration: {iterations}
+- Replacements per iteration: {replacements}
 
 """.format(iterations=iterations,
            replacements=replacements))
@@ -73,14 +74,15 @@ def corrupt(source, output, iterations, replacements, verbose):
     while True:
         while iters < iterations:
             if verbose:
-                sys.stdout.write( 'Iteration: %i' % (iters + 1))
+                sys.stdout.write('Iteration: %i' % (iters + 1))
 
             while steps < replacements:
                 pos_a = random.randint(block_start, block_end)
                 pos_b = random.randint(block_start, block_end)
 
                 if verbose:
-                    sys.stdout.write(' Swapping 1 bytes, %i and %i\n' % (pos_a, pos_b))
+                    sys.stdout.write(' Swapping 1 bytes, %i and %i\n' % (
+                        pos_a, pos_b))
 
                 output.seek(pos_a)
                 content_from_pos_a = output.read(1)
@@ -111,11 +113,12 @@ def corrupt(source, output, iterations, replacements, verbose):
             steps = 0
 
         try:
-            if not Image.open(output.name).verify():
-                break
-        except Exception as exc:
+            Image.open(output.name)
+            break
+        except IOError as exc:
             if verbose:
-                sys.stderr.write('Generated image cannot be verified')
+                sys.stderr.write(
+                    'Generated image cannot be verified: %s' % exc)
             continue
 
     output.close()
